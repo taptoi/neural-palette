@@ -66,8 +66,8 @@ def match_lab_lightness(outputs, targets):
     outputs[..., 0] = targets[..., 0]
     return outputs.permute(0, 3, 1, 2)
 
-def load_checkpoint(model, load_path, optimizer=None):
-    checkpoint = torch.load(load_path)
+def load_checkpoint(model, load_path, device, optimizer=None):
+    checkpoint = torch.load(load_path, map_location=device)
     model.load_state_dict(checkpoint['model_state_dict'])
     if optimizer:
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
@@ -139,7 +139,7 @@ def test_evaluate(checkpoint_path,
     n_c = 6
     # Load model:
     model = PaletteNet().to(device)
-    load_checkpoint(model, checkpoint_path)
+    load_checkpoint(model, checkpoint_path, device)
     print(f"Loaded checkpoint {checkpoint_path}")
     # Load input image:
     image = Image.open(img_in_path)
