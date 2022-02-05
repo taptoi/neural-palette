@@ -91,17 +91,9 @@ def evaluate(input, model):
     tform = transforms.Compose([
         transforms.ToTensor(),
     ])
-    # Ensure dimensions supported by model:
-    w, h = image.size
-    w_target = int(w / 64) * 64
-    h_target = int(h / 64) * 64
-    image = center_crop(image, w_target, h_target)
-    # PIL to numpy - convert to LAB:
-    img = np.array(image, dtype=np.float64) / 255.
-    img_lab = rgb2lab(img)
-    palette_lab = rgb2lab(palette / 255.)
-    img_lab = tform(normalize_to_network_input(img_lab))
-    palette_lab = tform(normalize_to_network_input(palette_lab))
+    
+    img_lab = tform(normalize_to_network_input(image))
+    palette_lab = tform(normalize_to_network_input(palette))
     # reshape to batch size 1:
     img_lab = img_lab[np.newaxis, :, :, :]
     palette_lab = palette_lab[np.newaxis, :, :, :]
@@ -123,11 +115,11 @@ def evaluate(input, model):
     output_pil = Image.fromarray(output.astype('uint8'), 'RGB')
     return output_pil
 
-
+# example: python evaluate.py --img_in_path=eval_in.png --img_pal_path=eval_pal_2.png --img_out_path=eval_out2.png
 @click.command()
 @click.option('--checkpoint_path', default='./checkpoints/good-darkness-93-run_1697036_checkpoint_epoch_11.pt', help='Path to network checkpoint')
 @click.option('--img_in_path', default='eval_in.png', help='Path to input image')
-@click.option('--img_pal_path', default='eval_pal.png', help='Path to image to extract palette from')
+@click.option('--img_pal_path', default='eval_pal_5.png', help='Path to image to extract palette from')
 @click.option('--img_out_path', default='eval_out.png', help='Path to output image')
 def test_evaluate(checkpoint_path,
                     img_in_path,
@@ -143,16 +135,46 @@ def test_evaluate(checkpoint_path,
     print(f"Loaded checkpoint {checkpoint_path}")
     # Load input image:
     image = Image.open(img_in_path)
+    
+    # Ensure dimensions supported by model:
+    w, h = image.size
+    w_target = int(w / 64) * 64
+    h_target = int(h / 64) * 64
+    image = center_crop(image, w_target, h_target)
+    
+    # PIL to numpy - convert to LAB:
+    img = np.array(image, dtype=np.float64) / 255.
+    img_lab = rgb2lab(img)
+
     # Load input palette image:
     palette_image = Image.open(img_pal_path)
     # Extract target palette by k-means:
     _, target_palette = get_image_palette(palette_image, n_c)
+    s = 360
+    pal = np.ones((3, s, s))
+    print("shape: ", target_palette.shape)
+    for i in range(n_c):
+        pal[:, :, i*(s//n_c):(i+1)*(s//n_c)] = target_palette[i, :].reshape(-1, 1, 1)
+    pal = lab2rgb(np.transpose(pal, (1, 2, 0))) * 255.
+    pal = Image.fromarray(pal.astype('uint8'), 'RGB')
+    pal.save("in_palette.png")
+
     # Add axis to add batch dimension:
     target_palette = target_palette[np.newaxis, :, :]
     # Perform the prediction:
-    output = evaluate((image, target_palette), model)
+    output = evaluate((img_lab, target_palette), model)
+    # Extract output palette by k-means:
+    _, output_palette = get_image_palette(output, n_c)
+    pal = np.ones((3, s, s))
+    for i in range(n_c):
+        pal[:, :, i*(s//n_c):(i+1)*(s//n_c)] = output_palette[i, :].reshape(-1, 1, 1)
+    pal = lab2rgb(np.transpose(pal, (1, 2, 0))) * 255.
+    pal = Image.fromarray(pal.astype('uint8'), 'RGB')
+    pal.save("out_plaette.png")
+
     # Save final output:
     output.save(img_out_path)
+    
 
 if __name__ == '__main__':
     test_evaluate()
